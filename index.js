@@ -96,3 +96,113 @@ let source = new RandStringSource(new RandStream())
 source.on('data', (data) => {
   console.log('SOURCE: ', data)
 })
+
+
+
+/*
+  Problem #3
+  Create a class ResourceManager which accepts an integer count as input. ResourceManager should manage a limited number of resource objects. The maximum number of resource objects that can be created is determined by count.
+
+  ResourceManager should implement a function borrow which accepts a callback as parameter. The borrow function should reserve a resource object and pass it to the caller through the callback. A resource object can never be acquired by other borrowers until the release function in the resource object is called.
+*/
+
+const resourceEvent = new EventEmitter()
+
+class Resource {
+  constructor() {
+    this.free = false
+  }
+
+  release() {
+    this.free = true
+    // Tell Resource Manager that a Resource has been released
+    resourceEvent.emit('RESOURCE_RELEASED')
+  }
+}
+
+class ResourceManager {
+  constructor(count) {
+    this.limit = count
+    this.resources = [] // contains current resources in use
+    this.queue = [] // callback queue: if the resources are full, the request to borrow will be put inside this queue. once a resource has been released, it will run the first item on the queue and remove it. FIFO
+
+    resourceEvent.on('RESOURCE_RELEASED', () => {
+      this.resources = this.resources.filter((r) => !r.free)
+
+      // if resources is not full and there is an item on queue, run the first item on the queue
+      if (this.resources.length < this.limit && this.queue.length > 0) {
+        let cb = this.queue.shift()
+        let resource = this.createNewResource()
+        cb(resource)
+      }
+    })
+  }
+
+  createNewResource() {
+    let resource = new Resource()
+    this.resources.push(resource)
+    return resource
+  }
+
+  borrow(cb) {
+    if (this.resources.length >= this.limit) {
+      // if resources is full, push to queue
+      this.queue.push(cb)
+    } else {
+      // if not, create the resource directly
+      let resource = this.createNewResource()
+      cb(resource)
+    }
+  }
+}
+
+let pool = new ResourceManager(2)
+console.log('START')
+
+let timestamp = Date.now()
+
+pool.borrow((res) => {
+  console.log('RES: 1');
+
+  setTimeout(() => {
+    res.release();
+  }, 500);
+});
+
+pool.borrow((res) => {
+  console.log('RES: 2');
+});
+
+pool.borrow((res) => {
+  console.log('RES: 3');
+  console.log('DURATION: ' + (Date.now() - timestamp));
+});
+
+/*
+  Here is an example when you borrow a resource 4 times at the same time, the third will execute after 500ms (resource 1 is released) and the fourth one will execute after another 5000ms (resource 3 is released)
+
+  pool.borrow((res) => {
+    console.log('RES: 1')
+
+    setTimeout(() => {
+      res.release()
+    }, 500)
+  })
+
+  pool.borrow((res) => {
+    console.log('RES: 2')
+  })
+
+  pool.borrow((res) => {
+    console.log('RES: 3')
+    setTimeout(() => {
+      res.release()
+    }, 5000)
+  })
+
+  pool.borrow((res) => {
+    console.log('RES: 4')
+    console.log('DURATION: ' + (Date.now() - timestamp))
+  })
+
+*/
